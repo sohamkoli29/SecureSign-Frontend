@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
-
+import { FileInput } from 'lucide-react';
 const Register = ({ setUser }) => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
@@ -69,10 +69,13 @@ const Register = ({ setUser }) => {
     <div className="min-h-screen bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full">
         {/* Logo and Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">📄 Document Signature</h1>
-          <p className="text-blue-100">Create your account</p>
-        </div>
+       <div className="text-center mb-8">
+  <h1 className="text-4xl font-bold text-white mb-2 flex items-center justify-center gap-3">
+      <FileInput className='w-12 h-auto' />
+    SecureSign
+  </h1>
+  <p className="text-blue-100">Sign in to your account</p>
+</div>
 
         {/* Register Card */}
         <div className="bg-white rounded-2xl shadow-2xl p-8">

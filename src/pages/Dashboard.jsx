@@ -4,7 +4,15 @@ import axios from 'axios';
 import UploadModal from '../components/UploadModal';
 import DocumentPreview from '../components/DocumentPreview';
 import AuditModal from '../components/AuditModal';
-
+import {
+ 
+  DocumentTextIcon,
+  ClockIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  CircleStackIcon
+} from '@heroicons/react/24/solid';
+import { DocumentCheckIcon } from "@heroicons/react/20/solid";
 const Dashboard = ({ user, setUser }) => {
   const navigate = useNavigate();
   const [documents, setDocuments]       = useState([]);
@@ -146,22 +154,27 @@ const Dashboard = ({ user, setUser }) => {
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-          {[
-            { label: 'Total',    value: stats.total,                 icon: '📄', color: 'text-gray-800'   },
-            { label: 'Pending',  value: stats.pending,               icon: '⏳', color: 'text-yellow-600' },
-            { label: 'Signed',   value: stats.signed,                icon: '✅', color: 'text-green-600'  },
-            { label: 'Rejected', value: stats.rejected,              icon: '❌', color: 'text-red-600'    },
-            { label: 'Storage',  value: formatFileSize(stats.totalSize), icon: '💾', color: 'text-gray-800' },
-          ].map(({ label, value, icon, color }) => (
-            <div key={label} className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500">{label}</p>
-                <p className={`text-xl font-bold ${color}`}>{value}</p>
-              </div>
-              <span className="text-2xl">{icon}</span>
-            </div>
-          ))}
-        </div>
+  {[
+    { label: 'Total',    value: stats.total,                 icon: DocumentTextIcon, color: 'text-gray-800' },
+    { label: 'Pending',  value: stats.pending,               icon: ClockIcon,        color: 'text-yellow-600' },
+    { label: 'Signed',   value: stats.signed,                icon: CheckCircleIcon,  color: 'text-green-600' },
+    { label: 'Rejected', value: stats.rejected,              icon: XCircleIcon,      color: 'text-red-600' },
+    { label: 'Storage',  value: formatFileSize(stats.totalSize), icon: CircleStackIcon, color: 'text-gray-800' },
+  ].map(({ label, value, icon: Icon, color }) => (
+    <div
+      key={label}
+      className="bg-white rounded-lg shadow p-4 flex items-center justify-between hover:shadow-md transition"
+    >
+      <div>
+        <p className="text-xs text-gray-500">{label}</p>
+        <p className={`text-xl font-bold ${color}`}>{value}</p>
+      </div>
+
+      <Icon className={`w-8 h-8 ${color}`} />
+    </div>
+  ))}
+</div>
+
 
         {/* Filters */}
         <div className="bg-white rounded-lg shadow p-4 mb-6 flex flex-col md:flex-row gap-4">
@@ -227,7 +240,7 @@ const Dashboard = ({ user, setUser }) => {
                       {/* Document */}
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <span className="text-2xl shrink-0">📄</span>
+                          <span ><DocumentCheckIcon className="w-6 h-auto  text-white-500" /></span>
                           <div className="min-w-0">
                             <p className="font-medium text-gray-800 truncate">{doc.title}</p>
                             <p className="text-xs text-gray-400 truncate">{doc.file_name}</p>

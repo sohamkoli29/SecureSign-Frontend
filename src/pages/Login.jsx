@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
-
+import { FileInput } from 'lucide-react';
 const Login = ({ setUser }) => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
@@ -50,9 +50,13 @@ const Login = ({ setUser }) => {
       <div className="max-w-md w-full">
         {/* Logo and Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">📄 Document Signature</h1>
-          <p className="text-blue-100">Sign in to your account</p>
-        </div>
+  <h1 className="text-4xl font-bold text-white mb-2 flex items-center justify-center gap-3">
+      <FileInput className='w-12 h-auto' />
+    SecureSign
+  </h1>
+  <p className="text-blue-100">Sign in to your account</p>
+</div>
+
 
         {/* Login Card */}
         <div className="bg-white rounded-2xl shadow-2xl p-8">
@@ -128,14 +132,7 @@ const Login = ({ setUser }) => {
           </div>
         </div>
 
-        {/* Demo Credentials */}
-        <div className="mt-6 bg-white/10 backdrop-blur-sm rounded-lg p-4">
-          <p className="text-white/90 text-sm text-center">
-            Demo Credentials:<br />
-            Email: demo@example.com<br />
-            Password: demo123
-          </p>
-        </div>
+     
       </div>
     </div>
   );
