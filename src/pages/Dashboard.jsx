@@ -110,7 +110,11 @@ const Dashboard = ({ user, setUser }) => {
       <nav className="bg-white shadow sticky top-0 z-10">
         <div className="container mx-auto px-4 flex justify-between items-center h-16">
           <div className="flex items-center gap-2">
-            <span className="text-2xl">📄</span>
+            <img 
+        src="/logo.png" 
+        alt="SecureSign Logo" 
+        className="h-8 w-auto"
+      />
             <span className="font-bold text-xl text-gray-800">SecureSign</span>
           </div>
           <div className="flex items-center gap-4">
