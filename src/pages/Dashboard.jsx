@@ -111,7 +111,7 @@ const Dashboard = ({ user, setUser }) => {
         <div className="container mx-auto px-4 flex justify-between items-center h-16">
           <div className="flex items-center gap-2">
             <span className="text-2xl">📄</span>
-            <span className="font-bold text-xl text-gray-800">DocSign</span>
+            <span className="font-bold text-xl text-gray-800">SecureSign</span>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right">
