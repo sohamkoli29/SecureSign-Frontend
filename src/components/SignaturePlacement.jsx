@@ -640,9 +640,16 @@ const SigCard = ({ sig, onSign, onSend, onAccept, onReject, onDelete }) => {
 
       <div className="flex items-center justify-between mb-2.5">
         <span className="text-xs text-white/30">Page {sig.page_number}</span>
-        <span className="text-xs text-white/25 font-mono">
-          {Math.round(sig.coordinates?.x ?? 0)}, {Math.round(sig.coordinates?.y ?? 0)}
-        </span>
+        <div className="flex items-center gap-2">
+          {sig.link_sent && (
+            <span className="text-xs text-yellow-400/60" title="Position locked (link sent)">
+              🔒
+            </span>
+          )}
+          <span className="text-xs text-white/25 font-mono">
+            {Math.round(sig.coordinates?.x ?? 0)}, {Math.round(sig.coordinates?.y ?? 0)}
+          </span>
+        </div>
       </div>
 
       <div className="flex gap-1.5">

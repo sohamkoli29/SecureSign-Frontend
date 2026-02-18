@@ -231,17 +231,23 @@ const PDFViewer = ({
 
               {signatures
                 .filter(s => s.page_number === currentPage)
-                .map(sig => (
-                  <div
-                    key={sig.id}
-                    className="absolute z-10 select-none"
-                    style={{
-                      left:   sig.coordinates?.x ?? 80,
-                      top:    sig.coordinates?.y ?? 80,
-                      cursor: onPositionChange ? 'grab' : 'default',
-                    }}
-                    onMouseDown={onPositionChange ? e => handleMouseDown(e, sig) : undefined}
-                  >
+                .map(sig => {
+                  // Lock position if link has been sent or signature is already signed/rejected
+                  const isLocked = sig.link_sent || sig.status === 'signed' || sig.status === 'rejected';
+                  const canDrag  = onPositionChange && !isLocked;
+
+                  return (
+                    <div
+                      key={sig.id}
+                      className="absolute z-10 select-none"
+                      style={{
+                        left:   sig.coordinates?.x ?? 80,
+                        top:    sig.coordinates?.y ?? 80,
+                        cursor: canDrag ? 'grab' : 'default',
+                      }}
+                      onMouseDown={canDrag ? e => handleMouseDown(e, sig) : undefined}
+                      title={isLocked ? 'Position locked (link sent or already signed)' : ''}
+                    >
                     {sig.signature_data ? (
                       <img
                         src={sig.signature_data}
@@ -261,17 +267,28 @@ const PDFViewer = ({
                     ) : (
                       <div
                         style={{ width: SIG_W, height: SIG_H }}
-                        className="flex items-center justify-center gap-1.5 bg-blue-500/70 backdrop-blur-sm text-white text-xs font-medium rounded border border-blue-400/40 shadow-lg"
+                        className={`flex items-center justify-center gap-1.5 text-white text-xs font-medium rounded border shadow-lg ${
+                          isLocked
+                            ? 'bg-gray-500/70 border-gray-400/40'
+                            : 'bg-blue-500/70 border-blue-400/40'
+                        } backdrop-blur-sm`}
                       >
                         <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                          {isLocked ? (
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                          ) : (
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                          )}
                         </svg>
                         {sig.signer_name}
+                        {isLocked && <span className="text-[10px] opacity-70">🔒</span>}
                       </div>
                     )}
                   </div>
-                ))}
+                );
+              })}
             </div>
           </Document>
         )}
