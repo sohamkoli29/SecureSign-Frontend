@@ -48,7 +48,7 @@ const SignaturePlacement = ({ document, onComplete }) => {
       await axios.post('/api/signatures', {
         document_id:    document.id,
         signer_name:    'Signer',
-        coordinates:    { x: 80, y: 80 },
+        coordinates:    { x: 80, y: 80, width: 220, height: 110 },
         page_number:    currentPage,
         signature_data: null,
         status:         'pending',
@@ -75,7 +75,7 @@ const SignaturePlacement = ({ document, onComplete }) => {
         await axios.post('/api/signatures', {
           document_id:    document.id,
           signer_name:    'Me',
-          coordinates:    { x: 80, y: 80 },
+          coordinates:    { x: 80, y: 80, width: 220, height: 110 },
           page_number:    currentPage,
           signature_data: signatureData,
           status:         'signed',
@@ -319,25 +319,14 @@ const SignaturePlacement = ({ document, onComplete }) => {
         {/* Action buttons */}
         <div className="p-3 space-y-2 border-b border-white/10">
 
-          {/* Sign myself */}
-          <button onClick={() => { setSelectedSig(null); setShowPad(true); }}
-            disabled={loading || finalizing}
-            className="w-full flex items-center justify-center gap-2 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
-            </svg>
-            Sign Myself
-          </button>
-
           {/* Add placeholder */}
           <button onClick={handleAddPlaceholder}
             disabled={loading || finalizing}
-            className="w-full flex items-center justify-center gap-2 py-2 bg-white/10 hover:bg-white/15 disabled:opacity-50 text-white/80 text-sm font-medium rounded-lg transition">
+            className="w-full flex items-center justify-center gap-2 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
             </svg>
-            Add Placeholder
+            Add Signature
           </button>
 
           {signedCount > 0 && (

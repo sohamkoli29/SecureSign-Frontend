@@ -1,31 +1,24 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef } from 'react';
 import { Document, Page } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import '../utils/pdfWorker';
 
 /**
- * PDFViewer
- *
- * ALL drag logic lives here — the wrapper ref is local so coords
- * are always calculated against the exact element that signatures
- * are positioned inside. No ref passing needed.
- *
- * Props
- * ─────
- * fileUrl       string
- * fileName      string
- * signatures    array   [{id, coordinates:{x,y}, page_number, status, signer_name, signature_data}]
- * currentPage   number
- * onPageChange  fn(page)
- * onPositionChange fn(sigId, {x, y})  — called live while dragging
- * onPositionSaved  fn(sigId, {x, y}) — called on mouse up (save to DB)
- * showToolbar   bool
- * onClose       fn
- * height        string
+ * PDFViewer - Day 11 with Corner Resize
+ * 
+ * - Drag to move (when unlocked)
+ * - Drag bottom-right corner to resize (when unlocked)
+ * - Locked when: link_sent=true OR status='signed'/'rejected'
+ * - Stores: {x, y, width, height} in coordinates
  */
-const SIG_W = 220;
-const SIG_H = 110;
+
+const DEFAULT_WIDTH  = 220;
+const DEFAULT_HEIGHT = 110;
+const MIN_WIDTH  = 100;
+const MIN_HEIGHT = 50;
+const MAX_WIDTH  = 500;
+const MAX_HEIGHT = 250;
 
 const PDFViewer = ({
   fileUrl,
@@ -33,8 +26,8 @@ const PDFViewer = ({
   signatures = [],
   currentPage = 1,
   onPageChange,
-  onPositionChange,  // live update while dragging
-  onPositionSaved,   // save on drop
+  onPositionChange,
+  onPositionSaved,
   showToolbar = true,
   onClose,
   height = '100%',
@@ -43,12 +36,10 @@ const PDFViewer = ({
   const [scale, setScale]       = useState(1.0);
   const [pdfError, setPdfError] = useState(null);
 
-  // The ONE ref — the `relative inline-block` wrapper that contains
-  // both the PDF <canvas> and the signature overlay divs.
-  const wrapperRef  = useRef(null);
+  const wrapperRef = useRef(null);
 
-  // Drag state — all in a single ref to avoid stale closures
-  const drag = useRef({ active: false, sigId: null, offsetX: 0, offsetY: 0 });
+  // Drag/resize state: { type: 'move'|'resize', sigId, offsetX, offsetY, startW, startH }
+  const action = useRef({ active: false });
 
   const onLoadSuccess = ({ numPages }) => { setNumPages(numPages); setPdfError(null); };
   const onLoadError   = (err)          => { setPdfError(err?.message || 'Failed to load PDF'); };
@@ -56,146 +47,158 @@ const PDFViewer = ({
   const goTo = (d) => onPageChange?.(Math.max(1, Math.min(currentPage + d, numPages || 1)));
   const zoom = (d) => setScale(s => Math.max(0.4, Math.min(2.5, parseFloat((s + d).toFixed(1)))));
 
-  /* ── Drag handlers — all use wrapperRef directly ──────────────── */
+  /* ── Mouse handlers ───────────────────────────────────────────── */
 
-  const handleMouseDown = useCallback((e, sig) => {
-    e.preventDefault();
+  const handleMoveStart = (e, sig) => {
     e.stopPropagation();
-
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
 
-    const wRect  = wrapper.getBoundingClientRect();
-    const sigEl  = e.currentTarget;
-    const sRect  = sigEl.getBoundingClientRect();
-
-    // Offset = where inside the sig element the user clicked
-    drag.current = {
-      active:  true,
-      sigId:   sig.id,
-      offsetX: e.clientX - sRect.left,
-      offsetY: e.clientY - sRect.top,
+    const rect = wrapper.getBoundingClientRect();
+    action.current = {
+      active: true,
+      type:   'move',
+      sigId:  sig.id,
+      offsetX: e.clientX - rect.left - (sig.coordinates?.x ?? 80),
+      offsetY: e.clientY - rect.top  - (sig.coordinates?.y ?? 80),
     };
-  }, []);
+  };
 
-  const handleMouseMove = useCallback((e) => {
-    if (!drag.current.active) return;
+  const handleResizeStart = (e, sig) => {
+    e.stopPropagation();
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+
+    const rect = wrapper.getBoundingClientRect();
+    action.current = {
+      active: true,
+      type:   'resize',
+      sigId:  sig.id,
+      startX: e.clientX,
+      startY: e.clientY,
+      startW: sig.coordinates?.width  ?? DEFAULT_WIDTH,
+      startH: sig.coordinates?.height ?? DEFAULT_HEIGHT,
+      posX:   sig.coordinates?.x ?? 80,
+      posY:   sig.coordinates?.y ?? 80,
+    };
+  };
+
+  const handleMouseMove = (e) => {
+    if (!action.current.active) return;
 
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
 
-    const wRect = wrapper.getBoundingClientRect();
+    const rect = wrapper.getBoundingClientRect();
 
-    // Coordinates relative to wrapper top-left
-    let x = e.clientX - wRect.left - drag.current.offsetX;
-    let y = e.clientY - wRect.top  - drag.current.offsetY;
+    if (action.current.type === 'move') {
+      let x = e.clientX - rect.left - action.current.offsetX;
+      let y = e.clientY - rect.top  - action.current.offsetY;
 
-    // ── Hard clamp to PDF page bounds ──────────────────────────────
-    // Signature can't go past the right/bottom edge of the PDF page.
-    // wRect.width/height IS the PDF page size (wrapper hugs the canvas).
-    x = Math.max(0, Math.min(x, wRect.width  - SIG_W));
-    y = Math.max(0, Math.min(y, wRect.height - SIG_H));
+      // Find sig to get its dimensions
+      const sig = signatures.find(s => s.id === action.current.sigId);
+      const w = sig?.coordinates?.width  ?? DEFAULT_WIDTH;
+      const h = sig?.coordinates?.height ?? DEFAULT_HEIGHT;
 
-    onPositionChange?.(drag.current.sigId, { x, y });
-  }, [onPositionChange]);
+      x = Math.max(0, Math.min(x, rect.width  - w));
+      y = Math.max(0, Math.min(y, rect.height - h));
 
-  const handleMouseUp = useCallback((e) => {
-    if (!drag.current.active) return;
+      onPositionChange?.(action.current.sigId, { 
+        x, 
+        y,
+        width: w,
+        height: h,
+      });
+    }
 
-    const wrapper = wrapperRef.current;
-    if (!wrapper) return;
+    if (action.current.type === 'resize') {
+      const deltaX = e.clientX - action.current.startX;
+      const deltaY = e.clientY - action.current.startY;
 
-    const wRect = wrapper.getBoundingClientRect();
+      let newW = action.current.startW + deltaX;
+      let newH = action.current.startH + deltaY;
 
-    let x = e.clientX - wRect.left - drag.current.offsetX;
-    let y = e.clientY - wRect.top  - drag.current.offsetY;
+      newW = Math.max(MIN_WIDTH,  Math.min(MAX_WIDTH,  newW));
+      newH = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, newH));
 
-    x = Math.max(0, Math.min(x, wRect.width  - SIG_W));
-    y = Math.max(0, Math.min(y, wRect.height - SIG_H));
+      // Don't let it exceed page bounds
+      const maxW = rect.width  - action.current.posX;
+      const maxH = rect.height - action.current.posY;
+      newW = Math.min(newW, maxW);
+      newH = Math.min(newH, maxH);
 
-    const sigId = drag.current.sigId;
-    drag.current = { active: false, sigId: null, offsetX: 0, offsetY: 0 };
+      onPositionChange?.(action.current.sigId, {
+        x:      action.current.posX,
+        y:      action.current.posY,
+        width:  newW,
+        height: newH,
+      });
+    }
+  };
 
-    onPositionSaved?.(sigId, { x, y });
-  }, [onPositionSaved]);
+  const handleMouseUp = () => {
+    if (!action.current.active) return;
 
-  const handleMouseLeave = useCallback(() => {
-    if (!drag.current.active) return;
-    // Treat leaving the wrapper as a drop
-    const sigId = drag.current.sigId;
-    drag.current = { active: false, sigId: null, offsetX: 0, offsetY: 0 };
-    // Don't save — just cancel the drag to avoid phantom positions
-    onPositionChange && onPositionChange(sigId, null); // null = revert
-  }, [onPositionChange]);
+    const sig = signatures.find(s => s.id === action.current.sigId);
+    if (sig?.coordinates) {
+      onPositionSaved?.(action.current.sigId, sig.coordinates);
+    }
 
-  const isDragging = drag.current.active;
+    action.current = { active: false };
+  };
+
+  const handleMouseLeave = () => {
+    if (action.current.active) {
+      handleMouseUp();
+    }
+  };
+
+  /* ── Render ───────────────────────────────────────────────────── */
+
+  const isDragging = action.current.active;
 
   return (
-    <div className="flex flex-col bg-[#1a1a2e]" style={{ height }}>
-
-      {/* ── Toolbar ───────────────────────────────────────────────── */}
+    <div className="flex flex-col h-full bg-gray-900">
       {showToolbar && (
-        <div className="flex items-center justify-between px-4 py-2.5 bg-[#16213e] border-b border-white/10 shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-7 h-7 rounded bg-blue-600/30 flex items-center justify-center shrink-0">
-              <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
-              </svg>
-            </div>
-            <span className="text-sm font-medium text-white/80 truncate" title={fileName}>{fileName}</span>
-          </div>
-
-          <div className="flex items-center gap-1 shrink-0">
-            {numPages && numPages > 1 && (<>
-              <TBtn onClick={() => goTo(-1)} disabled={currentPage <= 1} title="Prev">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
-                </svg>
-              </TBtn>
-              <span className="text-xs text-white/50 px-1.5 tabular-nums">{currentPage} / {numPages}</span>
-              <TBtn onClick={() => goTo(1)} disabled={currentPage >= numPages} title="Next">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
-                </svg>
-              </TBtn>
-              <div className="w-px h-4 bg-white/20 mx-1"/>
-            </>)}
-
-            <TBtn onClick={() => zoom(-0.1)} title="Zoom out">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4"/>
-              </svg>
-            </TBtn>
-            <span className="text-xs text-white/50 w-10 text-center tabular-nums">{Math.round(scale * 100)}%</span>
-            <TBtn onClick={() => zoom(0.1)} title="Zoom in">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
-              </svg>
-            </TBtn>
-
-            <div className="w-px h-4 bg-white/20 mx-1"/>
-            <a href={fileUrl} download={fileName} target="_blank" rel="noopener noreferrer"
-              className="p-1.5 rounded text-white/50 hover:text-white hover:bg-white/10 transition" title="Download">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-              </svg>
-            </a>
-
+        <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+          <div className="flex items-center gap-2">
             {onClose && (
-              <TBtn onClick={onClose} title="Close" danger>
+              <TBtn onClick={onClose} title="Close">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
                 </svg>
               </TBtn>
             )}
+            <span className="text-sm text-gray-300 font-medium">{fileName || 'Document'}</span>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <TBtn onClick={() => goTo(-1)} disabled={currentPage <= 1} title="Previous">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
+              </svg>
+            </TBtn>
+            <span className="px-3 text-xs text-gray-400 tabular-nums">
+              {currentPage} / {numPages || '?'}
+            </span>
+            <TBtn onClick={() => goTo(1)} disabled={currentPage >= (numPages || 1)} title="Next">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
+              </svg>
+            </TBtn>
+
+            <div className="w-px h-5 bg-gray-700 mx-1"/>
+
+            <TBtn onClick={() => zoom(-0.1)} disabled={scale <= 0.4} title="Zoom out">−</TBtn>
+            <span className="px-2 text-xs text-gray-400 tabular-nums min-w-[3rem] text-center">
+              {Math.round(scale * 100)}%
+            </span>
+            <TBtn onClick={() => zoom(0.1)} disabled={scale >= 2.5} title="Zoom in">+</TBtn>
           </div>
         </div>
       )}
 
-      {/* ── Scroll container — does NOT handle mouse events ───────── */}
-      <div className="flex-1 overflow-auto flex justify-center items-start p-8 select-none">
+      <div className="flex-1 overflow-auto flex items-center justify-center p-8">
         {pdfError ? (
           <ErrState fileUrl={fileUrl} message={pdfError}/>
         ) : (
@@ -206,14 +209,6 @@ const PDFViewer = ({
             loading={<LoadState/>}
             error={<ErrState fileUrl={fileUrl} message="Failed to load PDF"/>}
           >
-            {/*
-              wrapperRef is on THIS div.
-              - Its size == PDF page size at current scale
-              - All signature `left/top` values are relative to this div
-              - All drag math uses this div's getBoundingClientRect()
-              - Mouse events are on this div so they fire correctly
-                even when cursor moves fast outside the signature img
-            */}
             <div
               ref={wrapperRef}
               className="relative inline-block shadow-2xl"
@@ -232,63 +227,82 @@ const PDFViewer = ({
               {signatures
                 .filter(s => s.page_number === currentPage)
                 .map(sig => {
-                  // Lock position if link has been sent or signature is already signed/rejected
                   const isLocked = sig.link_sent || sig.status === 'signed' || sig.status === 'rejected';
                   const canDrag  = onPositionChange && !isLocked;
+
+                  const w = sig.coordinates?.width  ?? DEFAULT_WIDTH;
+                  const h = sig.coordinates?.height ?? DEFAULT_HEIGHT;
+                  const x = sig.coordinates?.x ?? 80;
+                  const y = sig.coordinates?.y ?? 80;
 
                   return (
                     <div
                       key={sig.id}
-                      className="absolute z-10 select-none"
+                      className="absolute z-10 select-none group"
                       style={{
-                        left:   sig.coordinates?.x ?? 80,
-                        top:    sig.coordinates?.y ?? 80,
+                        left:   x,
+                        top:    y,
+                        width:  w,
+                        height: h,
                         cursor: canDrag ? 'grab' : 'default',
                       }}
-                      onMouseDown={canDrag ? e => handleMouseDown(e, sig) : undefined}
-                      title={isLocked ? 'Position locked (link sent or already signed)' : ''}
+                      onMouseDown={canDrag ? e => handleMoveStart(e, sig) : undefined}
+                      title={isLocked ? 'Position locked (link sent or signed)' : ''}
                     >
-                    {sig.signature_data ? (
-                      <img
-                        src={sig.signature_data}
-                        alt={`Sig – ${sig.signer_name}`}
-                        draggable={false}
-                        style={{
-                          width:        `${SIG_W}px`,
-                          height:       `${SIG_H}px`,
-                          objectFit:    'contain',
-                          objectPosition: 'left center',
-                          display:      'block',
-                          pointerEvents:'none',
-                          filter:       'drop-shadow(0 1px 3px rgba(0,0,0,0.45))',
-                          userSelect:   'none',
-                        }}
-                      />
-                    ) : (
-                      <div
-                        style={{ width: SIG_W, height: SIG_H }}
-                        className={`flex items-center justify-center gap-1.5 text-white text-xs font-medium rounded border shadow-lg ${
-                          isLocked
-                            ? 'bg-gray-500/70 border-gray-400/40'
-                            : 'bg-blue-500/70 border-blue-400/40'
-                        } backdrop-blur-sm`}
-                      >
-                        <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          {isLocked ? (
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-                          ) : (
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                              d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
-                          )}
-                        </svg>
-                        {sig.signer_name}
-                        {isLocked && <span className="text-[10px] opacity-70">🔒</span>}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                      {sig.signature_data ? (
+                        <img
+                          src={sig.signature_data}
+                          alt={`Sig – ${sig.signer_name}`}
+                          draggable={false}
+                          style={{
+                            width:         '100%',
+                            height:        '100%',
+                            objectFit:     'contain',
+                            objectPosition:'left center',
+                            display:       'block',
+                            pointerEvents: 'none',
+                            filter:        'drop-shadow(0 1px 3px rgba(0,0,0,0.45))',
+                            userSelect:    'none',
+                          }}
+                        />
+                      ) : (
+                        <div
+                          className={`w-full h-full flex items-center justify-center gap-1.5 text-white text-xs font-medium rounded border shadow-lg backdrop-blur-sm ${
+                            isLocked
+                              ? 'bg-gray-500/70 border-gray-400/40'
+                              : 'bg-blue-500/70 border-blue-400/40'
+                          }`}
+                        >
+                          <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            {isLocked ? (
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                            ) : (
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                            )}
+                          </svg>
+                          <span className="truncate">{sig.signer_name}</span>
+                          {isLocked && <span className="text-[10px] opacity-70">🔒</span>}
+                        </div>
+                      )}
+
+                      {/* Resize handle — bottom-right corner, only if unlocked and no signature data */}
+                      {canDrag && !sig.signature_data && (
+                        <div
+                          className="absolute bottom-0 right-0 w-4 h-4 bg-blue-400 rounded-tl cursor-nwse-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                          style={{ borderBottomRightRadius: 4 }}
+                          onMouseDown={e => handleResizeStart(e, sig)}
+                          title="Drag to resize"
+                        >
+                          <svg className="w-3 h-3 text-white absolute bottom-0.5 right-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M7 17L17 7M17 17V7h0"/>
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
             </div>
           </Document>
         )}
@@ -299,31 +313,30 @@ const PDFViewer = ({
 
 const TBtn = ({ onClick, disabled, title, danger, children }) => (
   <button onClick={onClick} disabled={disabled} title={title}
-    className={`p-1.5 rounded transition disabled:opacity-30 disabled:cursor-not-allowed
-      ${danger ? 'text-white/50 hover:text-red-400 hover:bg-red-500/20'
-               : 'text-white/50 hover:text-white hover:bg-white/10'}`}>
+    className={`px-2 py-1 text-sm rounded transition ${
+      danger
+        ? 'text-red-400 hover:bg-red-500/20 disabled:text-red-800'
+        : 'text-gray-400 hover:bg-gray-700 disabled:text-gray-600'
+    } disabled:cursor-not-allowed`}>
     {children}
   </button>
 );
 
 const LoadState = () => (
-  <div className="flex flex-col items-center justify-center text-white/50 py-24 gap-4">
-    <div className="w-10 h-10 rounded-full border-2 border-white/20 border-t-blue-400 animate-spin"/>
-    <span className="text-sm">Loading PDF…</span>
+  <div className="flex flex-col items-center justify-center py-24 text-gray-400">
+    <div className="w-12 h-12 border-4 border-gray-700 border-t-gray-400 rounded-full animate-spin mb-4"/>
+    <p className="text-sm">Loading PDF...</p>
   </div>
 );
 
 const ErrState = ({ fileUrl, message }) => (
-  <div className="flex flex-col items-center justify-center text-white/60 py-24 gap-3">
-    <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
-      <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-      </svg>
-    </div>
-    <p className="text-sm font-medium text-white/70">{message}</p>
-    <a href={fileUrl} target="_blank" rel="noopener noreferrer"
-      className="text-xs text-blue-400 hover:text-blue-300 underline">Open in browser</a>
+  <div className="flex flex-col items-center justify-center py-24 text-gray-400">
+    <svg className="w-16 h-16 mb-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <p className="text-sm mb-2">{message || 'Failed to load PDF'}</p>
+    {fileUrl && <p className="text-xs text-gray-500 max-w-md truncate">{fileUrl}</p>}
   </div>
 );
 
