@@ -4,7 +4,7 @@ import axios from 'axios';
 export const useAuth = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-
+  const API_URL = import.meta.env.VITE_API_URL;
   useEffect(() => {
     // Check for stored user on mount
     const storedUser = localStorage.getItem('user');
@@ -24,9 +24,9 @@ export const useAuth = () => {
 
   const verifyToken = async (token) => {
     try {
-      await axios.get('/api/auth/me', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await axios.get(`${API_URL}/api/auth/me`, {
+  headers: { Authorization: `Bearer ${token}` }
+});
     } catch (error) {
       if (error.response?.status === 401) {
         console.log('Token expired, logging out...');

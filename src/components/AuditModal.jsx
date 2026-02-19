@@ -1,11 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-/**
- * AuditModal
- * Full-screen modal showing complete audit trail for a document
- * Triggered from Dashboard clock icon button
- */
+const API_URL = import.meta.env.VITE_API_URL;
 const AuditModal = ({ document, onClose }) => {
   const [logs, setLogs]       = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,7 +17,10 @@ const AuditModal = ({ document, onClose }) => {
     try {
       setLoading(true);
       setError('');
-      const { data } = await axios.get(`/api/audit/${document.id}`, auth());
+      const { data } = await axios.get(
+  `${API_URL}/api/audit/${document.id}`,
+  auth()
+);
       setLogs(data.data || []);
     } catch (e) {
       setError(e.response?.data?.error || 'Failed to load audit trail');

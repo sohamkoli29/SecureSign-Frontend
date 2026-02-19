@@ -13,13 +13,16 @@ const SignDocumentPage = () => {
   useEffect(() => {
     fetchDocument();
   }, [id]);
-
+  const API_URL = import.meta.env.VITE_API_URL;
   const fetchDocument = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`/api/documents/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+     const response = await axios.get(
+  `${API_URL}/api/documents/${id}`,
+  {
+    headers: { Authorization: `Bearer ${token}` }
+  }
+);
       setDocument(response.data.data);
     } catch (error) {
       console.error('Error fetching document:', error);

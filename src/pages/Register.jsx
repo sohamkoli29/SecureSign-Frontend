@@ -14,7 +14,7 @@ const Register = ({ setUser }) => {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(false);
-
+  const API_URL = import.meta.env.VITE_API_URL;
   const handleChange = (e) => {
     setFormData({
       ...formData,
@@ -46,11 +46,14 @@ const Register = ({ setUser }) => {
     }
 
     try {
-      const response = await axios.post('/api/auth/register', {
-        name: formData.name,
-        email: formData.email,
-        password: formData.password
-      });
+      const response = await axios.post(
+  `${API_URL}/api/auth/register`,
+  {
+    name: formData.name,
+    email: formData.email,
+    password: formData.password
+  }
+);
       
       if (response.data.success) {
         localStorage.setItem('token', response.data.data.token);

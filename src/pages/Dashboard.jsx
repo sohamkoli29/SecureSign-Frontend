@@ -26,7 +26,7 @@ const Dashboard = ({ user, setUser }) => {
   const [sortBy, setSortBy]       = useState('newest');
   const [auditDocument, setAuditDocument] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
+  const API_URL = import.meta.env.VITE_API_URL;
   useEffect(() => { fetchDocuments(); fetchStats(); }, []);
   useEffect(() => { filterAndSortDocuments(); }, [documents, filter, searchQuery, sortBy]);
 
@@ -34,7 +34,10 @@ const Dashboard = ({ user, setUser }) => {
 
   const fetchDocuments = async () => {
     try {
-      const { data } = await axios.get('/api/documents', auth());
+      const { data } = await axios.get(
+  `${API_URL}/api/documents`,
+  auth()
+);
       setDocuments(data.data || []);
     } catch (e) { console.error('fetchDocuments:', e); }
     finally { setLoading(false); }
@@ -42,7 +45,10 @@ const Dashboard = ({ user, setUser }) => {
 
   const fetchStats = async () => {
     try {
-      const { data } = await axios.get('/api/documents/stats', auth());
+     const { data } = await axios.get(
+  `${API_URL}/api/documents/stats`,
+  auth()
+);
       setStats(data.data);
     } catch (e) { console.error('fetchStats:', e); }
   };
@@ -78,7 +84,10 @@ const Dashboard = ({ user, setUser }) => {
   const handleDelete = async (docId) => {
     if (!window.confirm('Delete this document?')) return;
     try {
-      await axios.delete(`/api/documents/${docId}`, auth());
+      await axios.delete(
+  `${API_URL}/api/documents/${docId}`,
+  auth()
+);
       setDocuments(p => p.filter(d => d.id !== docId));
       fetchStats();
     } catch (e) { alert('Failed to delete document'); }

@@ -31,7 +31,7 @@ const UploadModal = ({ isOpen, onClose, onUploadSuccess }) => {
     maxFiles: 1,
     maxSize: 10 * 1024 * 1024 // 10MB
   });
-
+  const API_URL = import.meta.env.VITE_API_URL;
   const handleUpload = async () => {
     if (!selectedFile) {
       setError('Please select a file to upload');
@@ -48,12 +48,16 @@ const UploadModal = ({ isOpen, onClose, onUploadSuccess }) => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.post('/api/documents/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          Authorization: `Bearer ${token}`
-        }
-      });
+     const response = await axios.post(
+  `${API_URL}/api/documents/upload`,
+  formData,
+  {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+      Authorization: `Bearer ${token}`
+    }
+  }
+);
 
       if (response.data.success) {
         onUploadSuccess(response.data.data);

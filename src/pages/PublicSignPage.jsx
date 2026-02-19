@@ -23,11 +23,15 @@ const PublicSignPage = () => {
   const [docTitle, setDocTitle]       = useState('');
   const [signerName, setSignerName]   = useState('');
 
+  const API_URL = import.meta.env.VITE_API_URL;
+
   useEffect(() => { loadRequest(); }, [token]);
 
   const loadRequest = async () => {
     try {
-      const { data } = await axios.get(`/api/signatures/public/${token}`);
+     const { data } = await axios.get(
+  `${API_URL}/api/signatures/public/${token}`
+);  
 
       if (data.already_signed) {
         // Store name before clearing sigRequest
@@ -52,7 +56,10 @@ const PublicSignPage = () => {
   const handleSignatureSave = async (signatureData) => {
     try {
       setSubmitting(true);
-      await axios.post(`/api/signatures/public/${token}/sign`, { signature_data: signatureData });
+      await axios.post(
+  `${API_URL}/api/signatures/public/${token}/sign`,
+  { signature_data: signatureData }
+);
       setShowPad(false);
       // Keep sigRequest intact so success screen can show doc title
       setState('signed');
@@ -71,9 +78,10 @@ const PublicSignPage = () => {
     }
     try {
       setRejecting(true);
-      await axios.post(`/api/signatures/public/${token}/reject`, { 
-        rejection_reason: rejectReason.trim() 
-      });
+      await axios.post(
+  `${API_URL}/api/signatures/public/${token}/reject`,
+  { rejection_reason: rejectReason.trim() }
+);
       setShowRejectModal(false);
       setState('rejected');
     } catch (err) {

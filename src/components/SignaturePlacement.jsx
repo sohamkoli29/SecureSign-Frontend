@@ -29,14 +29,17 @@ const SignaturePlacement = ({ document, onComplete }) => {
   const [rejecting, setRejecting]             = useState(false);
 
   useEffect(() => { fetchSignatures(); }, [document.id]);
-
+  const API_URL = import.meta.env.VITE_API_URL;
   const auth = () => ({
     headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
   });
 
   const fetchSignatures = async () => {
     try {
-      const { data } = await axios.get(`/api/signatures/document/${document.id}`, auth());
+     const { data } = await axios.get(
+  `${API_URL}/api/signatures/document/${document.id}`,
+  auth()
+);
       setSignatures(data.data || []);
     } catch (e) { console.error('fetchSignatures:', e); }
   };
@@ -45,14 +48,18 @@ const SignaturePlacement = ({ document, onComplete }) => {
   const handleAddPlaceholder = async () => {
     try {
       setLoading(true);
-      await axios.post('/api/signatures', {
-        document_id:    document.id,
-        signer_name:    'Signer',
-        coordinates:    { x: 80, y: 80, width: 220, height: 110 },
-        page_number:    currentPage,
-        signature_data: null,
-        status:         'pending',
-      }, auth());
+    await axios.post(
+  `${API_URL}/api/signatures`,
+  {
+    document_id: document.id,
+    signer_name: 'Signer',
+    coordinates: { x: 80, y: 80, width: 220, height: 110 },
+    page_number: currentPage,
+    signature_data: null,
+    status: 'pending',
+  },
+  auth()
+);
       await fetchSignatures();
     } catch (e) {
       alert(e.response?.data?.error || 'Failed to add placeholder');
@@ -66,13 +73,13 @@ const SignaturePlacement = ({ document, onComplete }) => {
       if (selectedSig) {
         // Signing an existing pending placeholder
         await axios.patch(
-          `/api/signatures/${selectedSig.id}/status`,
+          `${API_URL}/api/signatures/${selectedSig.id}/status`,
           { status: 'signed', signature_data: signatureData },
           auth()
         );
       } else {
         // Creating a new signature directly (Sign Myself — signed immediately)
-        await axios.post('/api/signatures', {
+        await axios.post(`${API_URL}/api/signatures`, {
           document_id:    document.id,
           signer_name:    'Me',
           coordinates:    { x: 80, y: 80, width: 220, height: 110 },
@@ -95,7 +102,7 @@ const SignaturePlacement = ({ document, onComplete }) => {
     try {
       setLoading(true);
       await axios.patch(
-        `/api/signatures/${sig.id}/status`,
+        `${API_URL}/api/signatures/${sig.id}/status`,
         { status: 'signed' },
         auth()
       );
@@ -120,7 +127,7 @@ const SignaturePlacement = ({ document, onComplete }) => {
     try {
       setRejecting(true);
       await axios.patch(
-        `/api/signatures/${rejectTargetSig.id}/status`,
+        `${API_URL}/api/signatures/${rejectTargetSig.id}/status`,
         { 
           status: 'rejected', 
           rejection_reason: rejectReason.trim(),
@@ -141,7 +148,7 @@ const SignaturePlacement = ({ document, onComplete }) => {
   const handleDelete = async (sigId) => {
     if (!window.confirm('Delete this signature?')) return;
     try {
-      await axios.delete(`/api/signatures/${sigId}`, auth());
+      await axios.delete(`${API_URL}/api/signatures/${sigId}`, auth());
       await fetchSignatures();
     } catch (e) { alert('Failed to delete'); }
   };
@@ -153,7 +160,7 @@ const SignaturePlacement = ({ document, onComplete }) => {
     if (!window.confirm(`Burn ${n} signature(s) into PDF permanently?`)) return;
     try {
       setFinalizing(true);
-      const { data } = await axios.post(`/api/documents/${document.id}/finalize`, {}, auth());
+      const { data } = await axios.post(`${API_URL}/api/documents/${document.id}/finalize`, {}, auth());
       const url = data.data.signed_file_url;
       setFinalizedUrl(url);
       triggerDownload(url, `signed-${document.title || document.file_name}`);
@@ -199,7 +206,7 @@ const SignaturePlacement = ({ document, onComplete }) => {
     try {
       setSending(true);
       const { data } = await axios.post(
-        `/api/signatures/${target.id}/send-link`,
+        `${API_URL}/api/signatures/${target.id}/send-link`,
         { signer_name: sendName, signer_email: sendEmail },
         auth()
       );
@@ -239,7 +246,7 @@ const SignaturePlacement = ({ document, onComplete }) => {
     );
     try {
       await axios.put(
-        `/api/signatures/${sigId}/position`,
+        `${API_URL}/api/signatures/${sigId}/position`,
         { coordinates: coords, page_number: currentPage },
         auth()
       );

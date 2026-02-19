@@ -21,12 +21,15 @@ const AuditTrailPanel = ({ documentId }) => {
   const auth = () => ({
     headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
   });
-
+  const API_URL = import.meta.env.VITE_API_URL;
   const fetchAudit = async () => {
     try {
       setLoading(true);
       setError('');
-      const { data } = await axios.get(`/api/audit/${documentId}`, auth());
+      const { data } = await axios.get(
+  `${API_URL}/api/audit/${documentId}`,
+  auth()
+);
       setLogs(data.data || []);
     } catch (e) {
       setError(e.response?.data?.error || 'Failed to load audit trail');
