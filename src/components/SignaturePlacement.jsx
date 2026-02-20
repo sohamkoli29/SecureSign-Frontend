@@ -12,8 +12,9 @@ const SignaturePlacement = ({ document, onComplete }) => {
   const [finalizing, setFinalizing]       = useState(false);
   const [finalizedUrl, setFinalizedUrl]   = useState(document.signed_file_url || null);
   const [currentPage, setCurrentPage]     = useState(1);
+  const [showSidebar, setShowSidebar]     = useState(false); // Mobile sidebar toggle
 
-  // Send-for-signature modal state
+  // Send modal state
   const [showSendModal, setShowSendModal] = useState(false);
   const [sendTargetSig, setSendTargetSig] = useState(null);
   const [sendName, setSendName]           = useState('');
@@ -36,49 +37,38 @@ const SignaturePlacement = ({ document, onComplete }) => {
 
   const fetchSignatures = async () => {
     try {
-     const { data } = await axios.get(
-  `${API_URL}/api/signatures/document/${document.id}`,
-  auth()
-);
+      const { data } = await axios.get(`${API_URL}/api/signatures/document/${document.id}`, auth());
       setSignatures(data.data || []);
     } catch (e) { console.error('fetchSignatures:', e); }
   };
 
-  /* ── Add placeholder (pending, no signature data — for external signing) ── */
   const handleAddPlaceholder = async () => {
     try {
       setLoading(true);
-    await axios.post(
-  `${API_URL}/api/signatures`,
-  {
-    document_id: document.id,
-    signer_name: 'Signer',
-    coordinates: { x: 80, y: 80, width: 220, height: 110 },
-    page_number: currentPage,
-    signature_data: null,
-    status: 'pending',
-  },
-  auth()
-);
+      await axios.post(`${API_URL}/api/signatures`, {
+        document_id: document.id,
+        signer_name: 'Signer',
+        coordinates: { x: 80, y: 80, width: 220, height: 110 },
+        page_number: currentPage,
+        signature_data: null,
+        status: 'pending',
+      }, auth());
       await fetchSignatures();
     } catch (e) {
       alert(e.response?.data?.error || 'Failed to add placeholder');
     } finally { setLoading(false); }
   };
 
-  /* ── Save / apply signature (Sign Myself flow only) ─────────── */
   const handleSignatureSave = async (signatureData) => {
     try {
       setLoading(true);
       if (selectedSig) {
-        // Signing an existing pending placeholder
         await axios.patch(
           `${API_URL}/api/signatures/${selectedSig.id}/status`,
           { status: 'signed', signature_data: signatureData },
           auth()
         );
       } else {
-        // Creating a new signature directly (Sign Myself — signed immediately)
         await axios.post(`${API_URL}/api/signatures`, {
           document_id:    document.id,
           signer_name:    'Me',
@@ -96,23 +86,17 @@ const SignaturePlacement = ({ document, onComplete }) => {
     } finally { setLoading(false); }
   };
 
-  /* ── Accept signature ────────────────────────────────────────── */
   const handleAccept = async (sig) => {
     if (!window.confirm(`Accept signature from ${sig.signer_name}?`)) return;
     try {
       setLoading(true);
-      await axios.patch(
-        `${API_URL}/api/signatures/${sig.id}/status`,
-        { status: 'signed' },
-        auth()
-      );
+      await axios.patch(`${API_URL}/api/signatures/${sig.id}/status`, { status: 'signed' }, auth());
       await fetchSignatures();
     } catch (e) {
       alert(e.response?.data?.error || 'Failed to accept signature');
     } finally { setLoading(false); }
   };
 
-  /* ── Reject signature ────────────────────────────────────────── */
   const openRejectModal = (sig) => {
     setRejectTargetSig(sig);
     setRejectReason('');
@@ -126,15 +110,11 @@ const SignaturePlacement = ({ document, onComplete }) => {
     }
     try {
       setRejecting(true);
-      await axios.patch(
-        `${API_URL}/api/signatures/${rejectTargetSig.id}/status`,
-        { 
-          status: 'rejected', 
-          rejection_reason: rejectReason.trim(),
-          notify_signer: true  // ← tells backend to send email
-        },
-        auth()
-      );
+      await axios.patch(`${API_URL}/api/signatures/${rejectTargetSig.id}/status`, { 
+        status: 'rejected', 
+        rejection_reason: rejectReason.trim(),
+        notify_signer: true
+      }, auth());
       setShowRejectModal(false);
       setRejectTargetSig(null);
       setRejectReason('');
@@ -144,7 +124,6 @@ const SignaturePlacement = ({ document, onComplete }) => {
     } finally { setRejecting(false); }
   };
 
-  /* ── Delete ──────────────────────────────────────────────────── */
   const handleDelete = async (sigId) => {
     if (!window.confirm('Delete this signature?')) return;
     try {
@@ -153,7 +132,6 @@ const SignaturePlacement = ({ document, onComplete }) => {
     } catch (e) { alert('Failed to delete'); }
   };
 
-  /* ── Finalize ────────────────────────────────────────────────── */
   const handleFinalize = async () => {
     const n = signatures.filter(s => s.status === 'signed').length;
     if (n === 0) { alert('Sign at least one signature before finalizing.'); return; }
@@ -179,7 +157,6 @@ const SignaturePlacement = ({ document, onComplete }) => {
     window.document.body.removeChild(a);
   };
 
-  /* ── Send-for-signature ──────────────────────────────────────── */
   const openSendModal = (sig) => {
     const pending = signatures.filter(s => s.status !== 'signed');
     const target  = sig?.id ? sig : (pending.length === 1 ? pending[0] : null);
@@ -193,16 +170,11 @@ const SignaturePlacement = ({ document, onComplete }) => {
 
   const handleSendLink = async () => {
     if (!sendName.trim()) { alert("Please enter the signer's name"); return; }
-
-    const target = sendTargetSig?.id
-      ? sendTargetSig
-      : signatures.find(s => s.status !== 'signed');
-
+    const target = sendTargetSig?.id ? sendTargetSig : signatures.find(s => s.status !== 'signed');
     if (!target?.id) {
       alert('No pending signature placeholder found. Add a placeholder first.');
       return;
     }
-
     try {
       setSending(true);
       const { data } = await axios.post(
@@ -232,30 +204,21 @@ const SignaturePlacement = ({ document, onComplete }) => {
     setTimeout(() => setCopySuccess(false), 2500);
   };
 
-  /* ── Drag position callbacks ─────────────────────────────────── */
   const handlePositionChange = (sigId, coords) => {
     if (!coords) { fetchSignatures(); return; }
-    setSignatures(prev =>
-      prev.map(s => s.id === sigId ? { ...s, coordinates: coords } : s)
-    );
+    setSignatures(prev => prev.map(s => s.id === sigId ? { ...s, coordinates: coords } : s));
   };
 
   const handlePositionSaved = async (sigId, coords) => {
-    setSignatures(prev =>
-      prev.map(s => s.id === sigId ? { ...s, coordinates: coords } : s)
-    );
+    setSignatures(prev => prev.map(s => s.id === sigId ? { ...s, coordinates: coords } : s));
     try {
-      await axios.put(
-        `${API_URL}/api/signatures/${sigId}/position`,
-        { coordinates: coords, page_number: currentPage },
-        auth()
-      );
+      await axios.put(`${API_URL}/api/signatures/${sigId}/position`, 
+        { coordinates: coords, page_number: currentPage }, auth());
     } catch (e) {
       await fetchSignatures();
     }
   };
 
-  /* ── Derived state ───────────────────────────────────────────── */
   const signedCount    = signatures.filter(s => s.status === 'signed').length;
   const pendingCount   = signatures.filter(s => s.status === 'pending').length;
   const rejectedCount  = signatures.filter(s => s.status === 'rejected').length;
@@ -264,12 +227,33 @@ const SignaturePlacement = ({ document, onComplete }) => {
   const rejectedSigs   = signatures.filter(s => s.status === 'rejected');
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#0f0f1a]">
+    <div className="flex flex-col md:flex-row h-screen overflow-hidden bg-[#0f0f1a]">
 
-      {/* ── Sidebar ──────────────────────────────────────────────── */}
-      <aside className="w-72 shrink-0 bg-[#16213e] border-r border-white/10 flex flex-col">
+      {/* Mobile Header */}
+      <div className="md:hidden flex items-center justify-between px-4 py-3 bg-[#16213e] border-b border-white/10">
+        <button onClick={() => setShowSidebar(!showSidebar)}
+          className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition">
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16"/>
+          </svg>
+        </button>
+        <h2 className="text-sm font-bold text-white truncate flex-1 mx-3">{document.title}</h2>
+        <button onClick={() => window.location.href = '/dashboard'}
+          className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition">
+          ✕
+        </button>
+      </div>
 
-        <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/10">
+      {/* Sidebar - Desktop always visible, Mobile drawer */}
+      <aside className={`
+        fixed md:static inset-y-0 left-0 z-40
+        w-80 md:w-72 shrink-0 bg-[#16213e] border-r border-white/10 
+        flex flex-col
+        transform transition-transform duration-300 ease-in-out
+        ${showSidebar ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+      `}>
+        {/* Desktop Header */}
+        <div className="hidden md:flex items-center justify-between px-4 py-3.5 border-b border-white/10">
           <div>
             <h2 className="text-sm font-bold text-white">Signatures</h2>
             <p className="text-xs text-white/40 mt-0.5 truncate max-w-[160px]">{document.title}</p>
@@ -280,42 +264,55 @@ const SignaturePlacement = ({ document, onComplete }) => {
           </button>
         </div>
 
+        {/* Mobile Header with Close Button */}
+        <div className="md:hidden flex items-center justify-between px-4 py-3.5 border-b border-white/10">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-sm font-bold text-white">Signatures</h2>
+            <p className="text-xs text-white/40 mt-0.5 truncate">{document.title}</p>
+          </div>
+          <button 
+            onClick={() => setShowSidebar(false)}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition ml-2"
+            aria-label="Close sidebar"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
         {/* Stats */}
-        <div className="flex border-b border-white/10 divide-x divide-white/10">
+        <div className="grid grid-cols-4 border-b border-white/10">
           {[
             { label: 'Total',    value: signatures.length, color: 'text-white'       },
             { label: 'Pending',  value: pendingCount,      color: 'text-yellow-400'  },
             { label: 'Signed',   value: signedCount,       color: 'text-emerald-400' },
             { label: 'Rejected', value: rejectedCount,     color: 'text-red-400'     },
           ].map(({ label, value, color }) => (
-            <div key={label} className="flex-1 flex flex-col items-center py-2.5">
-              <span className={`text-lg font-bold leading-none ${color}`}>{value}</span>
-              <span className="text-xs text-white/30 mt-0.5">{label}</span>
+            <div key={label} className="flex flex-col items-center py-3 border-r border-white/10 last:border-r-0">
+              <span className={`text-lg md:text-xl font-bold leading-none ${color}`}>{value}</span>
+              <span className="text-[10px] md:text-xs text-white/30 mt-1">{label}</span>
             </div>
           ))}
         </div>
 
-        {/* Ready to finalize banner */}
+        {/* Banners */}
         {allSigned && (
           <div className="mx-3 mt-3 px-3 py-2 bg-emerald-500/15 border border-emerald-500/30 rounded-lg">
-            <p className="text-xs text-emerald-400 font-medium">✅ All signatures complete</p>
-            <p className="text-xs text-emerald-400/60 mt-0.5">Ready to finalize document</p>
+            <p className="text-xs text-emerald-400 font-medium">✅ All complete</p>
+            <p className="text-xs text-emerald-400/60 mt-0.5">Ready to finalize</p>
           </div>
         )}
 
-        {/* Document rejected banner */}
         {hasRejected && (
-          <div className="mx-3 mt-3 px-3 py-2.5 bg-red-500/15 border border-red-500/30 rounded-lg">
-            <p className="text-xs text-red-400 font-medium">❌ Document Rejected</p>
-            <p className="text-xs text-red-400/60 mt-1.5">
-              {rejectedSigs.length} signature{rejectedSigs.length > 1 ? 's' : ''} rejected:
-            </p>
+          <div className="mx-3 mt-3 px-3 py-2.5 bg-red-500/15 border border-red-500/30 rounded-lg max-h-32 overflow-y-auto">
+            <p className="text-xs text-red-400 font-medium">❌ Rejected</p>
             <div className="mt-2 space-y-1.5">
               {rejectedSigs.map(sig => (
-                <div key={sig.id} className="text-xs text-red-300 bg-red-500/10 rounded px-2 py-1.5 border border-red-500/20">
+                <div key={sig.id} className="text-xs text-red-300 bg-red-500/10 rounded px-2 py-1.5">
                   <p className="font-medium">{sig.signer_name}</p>
                   {sig.rejection_reason && (
-                    <p className="text-red-400/80 mt-0.5 italic">"{sig.rejection_reason}"</p>
+                    <p className="text-red-400/80 mt-0.5 italic line-clamp-2">"{sig.rejection_reason}"</p>
                   )}
                 </div>
               ))}
@@ -323,13 +320,10 @@ const SignaturePlacement = ({ document, onComplete }) => {
           </div>
         )}
 
-        {/* Action buttons */}
+        {/* Actions */}
         <div className="p-3 space-y-2 border-b border-white/10">
-
-          {/* Add placeholder */}
-          <button onClick={handleAddPlaceholder}
-            disabled={loading || finalizing}
-            className="w-full flex items-center justify-center gap-2 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
+          <button onClick={handleAddPlaceholder} disabled={loading || finalizing}
+            className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
             </svg>
@@ -338,29 +332,38 @@ const SignaturePlacement = ({ document, onComplete }) => {
 
           {signedCount > 0 && (
             <button onClick={handleFinalize} disabled={finalizing || loading}
-              className="w-full flex items-center justify-center gap-2 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-semibold rounded-lg transition">
-              {finalizing
-                ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>Finalizing…</>
-                : <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-semibold rounded-lg transition">
+              {finalizing ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
+                  <span className="hidden sm:inline">Finalizing…</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                  </svg>Finalize & Download</>
-              }
+                  </svg>
+                  <span className="hidden sm:inline">Finalize & Download</span>
+                  <span className="sm:hidden">Finalize</span>
+                </>
+              )}
             </button>
           )}
 
           {finalizedUrl && !finalizing && (
             <a href={finalizedUrl} target="_blank" rel="noopener noreferrer"
-              className="w-full flex items-center justify-center gap-2 py-2 bg-white/10 hover:bg-white/15 text-white/80 text-sm rounded-lg transition">
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-white/10 hover:bg-white/15 text-white/80 text-sm rounded-lg transition">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
               </svg>
-              Download Signed PDF
+              <span className="hidden sm:inline">Download Signed PDF</span>
+              <span className="sm:hidden">Download</span>
             </a>
           )}
         </div>
 
-        {/* Signature list */}
+        {/* Signature List */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {signatures.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-white/30 py-12 gap-2">
@@ -368,30 +371,38 @@ const SignaturePlacement = ({ document, onComplete }) => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1}
                   d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
               </svg>
-              <p className="text-xs text-center">No signatures yet.<br/>Click "Add Placeholder".</p>
+              <p className="text-xs text-center">No signatures yet</p>
             </div>
           ) : signatures.map(sig => (
             <SigCard
               key={sig.id}
               sig={sig}
-              onSign={() => { setSelectedSig(sig); setShowPad(true); }}
-              onSend={() => openSendModal(sig)}
+              onSign={() => { setSelectedSig(sig); setShowPad(true); setShowSidebar(false); }}
+              onSend={() => { openSendModal(sig); setShowSidebar(false); }}
               onAccept={() => handleAccept(sig)}
-              onReject={() => openRejectModal(sig)}
+              onReject={() => { openRejectModal(sig); setShowSidebar(false); }}
               onDelete={() => handleDelete(sig.id)}
             />
           ))}
         </div>
 
-        {/* Audit trail panel */}
+        {/* Audit Trail */}
         <AuditTrailPanel documentId={document.id} />
 
         <div className="px-4 py-3 border-t border-white/10">
-          <p className="text-xs text-white/25 text-center">Drag signatures on the PDF to reposition</p>
+          <p className="text-xs text-white/25 text-center">Drag signatures to reposition</p>
         </div>
       </aside>
 
-      {/* ── PDF Viewer ───────────────────────────────────────────── */}
+      {/* Overlay for mobile sidebar */}
+      {showSidebar && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/50 z-30"
+          onClick={() => setShowSidebar(false)}
+        />
+      )}
+
+      {/* PDF Viewer */}
       <main className="flex-1 overflow-hidden">
         <PDFViewer
           fileUrl={document.file_url}
@@ -406,7 +417,7 @@ const SignaturePlacement = ({ document, onComplete }) => {
         />
       </main>
 
-      {/* ── Signature Pad modal ───────────────────────────────────── */}
+      {/* Modals */}
       {showPad && (
         <SignaturePad
           onSave={handleSignatureSave}
@@ -414,17 +425,16 @@ const SignaturePlacement = ({ document, onComplete }) => {
         />
       )}
 
-      {/* ── Send for Signature modal ──────────────────────────────── */}
+      {/* Send Modal */}
       {showSendModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(0,0,0,0.75)' }}
-          onClick={e => { if (e.target === e.currentTarget) setShowSendModal(false); }}
-        >
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
+          onClick={e => { if (e.target === e.currentTarget) setShowSendModal(false); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b">
               <div>
-                <h2 className="font-bold text-gray-900">Send for Signature</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Generate a link — no account required</p>
+                <h2 className="font-bold text-gray-900 text-base sm:text-lg">Send for Signature</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Generate a link</p>
               </div>
               <button onClick={() => setShowSendModal(false)}
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 transition">
@@ -432,7 +442,7 @@ const SignaturePlacement = ({ document, onComplete }) => {
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-4 sm:p-6 space-y-4">
               {!sentLink ? (
                 <>
                   {signatures.filter(s => s.status !== 'signed').length > 1 && (
@@ -446,9 +456,8 @@ const SignaturePlacement = ({ document, onComplete }) => {
                           const sig = signatures.find(s => s.id === e.target.value);
                           setSendTargetSig(sig || null);
                         }}
-                        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">Select a signature placeholder…</option>
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">Select…</option>
                         {signatures.filter(s => s.status !== 'signed').map(s => (
                           <option key={s.id} value={s.id}>
                             Page {s.page_number} — {s.signer_name}
@@ -469,7 +478,7 @@ const SignaturePlacement = ({ document, onComplete }) => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Signer Email <span className="text-gray-400 font-normal">(optional)</span>
+                      Email <span className="text-gray-400 font-normal">(optional)</span>
                     </label>
                     <input type="email" value={sendEmail} onChange={e => setSendEmail(e.target.value)}
                       placeholder="john@example.com"
@@ -478,15 +487,17 @@ const SignaturePlacement = ({ document, onComplete }) => {
 
                   <div className="flex gap-2.5 p-3 bg-blue-50 rounded-lg border border-blue-100">
                     <span className="text-blue-500 shrink-0">ℹ️</span>
-                    <p className="text-xs text-blue-700">Link expires in 7 days. Share only with the intended signer.</p>
+                    <p className="text-xs text-blue-700">Expires in 7 days</p>
                   </div>
 
                   <button onClick={handleSendLink} disabled={sending || !sendName.trim()}
                     className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium rounded-lg transition">
-                    {sending
-                      ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Generating…</>
-                      : 'Generate Signing Link'
-                    }
+                    {sending ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Generating…
+                      </>
+                    ) : 'Generate Link'}
                   </button>
                 </>
               ) : (
@@ -494,12 +505,12 @@ const SignaturePlacement = ({ document, onComplete }) => {
                   <div className="flex items-center gap-2 p-3 bg-emerald-50 rounded-lg border border-emerald-200">
                     <span className="text-emerald-600">✅</span>
                     <p className="text-sm text-emerald-700 font-medium">
-                      {sendEmail ? `Email sent to ${sendEmail}` : 'Signing link generated!'}
+                      {sendEmail ? `Sent to ${sendEmail}` : 'Link generated!'}
                     </p>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Signing Link</label>
+                    <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase">Link</label>
                     <div className="flex gap-2">
                       <input type="text" value={sentLink} readOnly
                         className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600 font-mono focus:outline-none" />
@@ -507,14 +518,10 @@ const SignaturePlacement = ({ document, onComplete }) => {
                         className={`px-3 py-2 rounded-lg text-sm font-medium transition shrink-0 ${
                           copySuccess ? 'bg-emerald-500 text-white' : 'bg-gray-900 text-white hover:bg-gray-700'
                         }`}>
-                        {copySuccess ? '✓ Copied' : 'Copy'}
+                        {copySuccess ? '✓' : 'Copy'}
                       </button>
                     </div>
                   </div>
-
-                  <p className="text-xs text-gray-400">
-                    Share with <strong className="text-gray-600">{sendName}</strong>. Expires in 7 days.
-                  </p>
 
                   <button onClick={() => setShowSendModal(false)}
                     className="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition">
@@ -527,17 +534,16 @@ const SignaturePlacement = ({ document, onComplete }) => {
         </div>
       )}
 
-      {/* ── Reject modal ──────────────────────────────────────────── */}
+      {/* Reject Modal */}
       {showRejectModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(0,0,0,0.75)' }}
-          onClick={e => { if (e.target === e.currentTarget) setShowRejectModal(false); }}
-        >
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
+          onClick={e => { if (e.target === e.currentTarget) setShowRejectModal(false); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b">
               <div>
-                <h2 className="font-bold text-gray-900">Reject Signature</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Provide a reason for rejection</p>
+                <h2 className="font-bold text-gray-900 text-base sm:text-lg">Reject Signature</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Provide reason</p>
               </div>
               <button onClick={() => setShowRejectModal(false)}
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 transition">
@@ -545,15 +551,15 @@ const SignaturePlacement = ({ document, onComplete }) => {
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-4 sm:p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Rejecting signature from: <strong>{rejectTargetSig?.signer_name}</strong>
+                  From: <strong>{rejectTargetSig?.signer_name}</strong>
                 </label>
                 <textarea
                   value={rejectReason}
                   onChange={e => setRejectReason(e.target.value)}
-                  placeholder="e.g., Document contains errors, missing information, incorrect terms..."
+                  placeholder="Reason for rejection..."
                   rows={4}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
                 />
@@ -564,9 +570,7 @@ const SignaturePlacement = ({ document, onComplete }) => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                     d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                 </svg>
-                <p className="text-xs text-red-700">
-                  This will mark the signature as rejected. The signer will need to be notified separately.
-                </p>
+                <p className="text-xs text-red-700">Signer will be notified</p>
               </div>
 
               <div className="flex gap-2">
@@ -576,10 +580,9 @@ const SignaturePlacement = ({ document, onComplete }) => {
                 </button>
                 <button onClick={handleReject} disabled={rejecting || !rejectReason.trim()}
                   className="flex-1 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition">
-                  {rejecting
-                    ? <div className="w-4 h-4 mx-auto border-2 border-white/30 border-t-white rounded-full animate-spin"/>
-                    : 'Reject Signature'
-                  }
+                  {rejecting ? (
+                    <div className="w-4 h-4 mx-auto border-2 border-white/30 border-t-white rounded-full animate-spin"/>
+                  ) : 'Reject'}
                 </button>
               </div>
             </div>
@@ -587,13 +590,13 @@ const SignaturePlacement = ({ document, onComplete }) => {
         </div>
       )}
 
-      {/* ── Loading overlay ───────────────────────────────────────── */}
+      {/* Loading */}
       {(loading || finalizing) && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl px-6 py-5 flex items-center gap-3 shadow-2xl">
             <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin"/>
             <span className="text-sm font-medium text-gray-700">
-              {finalizing ? 'Generating signed PDF…' : 'Saving…'}
+              {finalizing ? 'Finalizing…' : 'Saving…'}
             </span>
           </div>
         </div>
@@ -602,7 +605,6 @@ const SignaturePlacement = ({ document, onComplete }) => {
   );
 };
 
-/* ── Signature card ──────────────────────────────────────────────── */
 const SigCard = ({ sig, onSign, onSend, onAccept, onReject, onDelete }) => {
   const statusStyle = {
     signed:   'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
@@ -629,8 +631,8 @@ const SigCard = ({ sig, onSign, onSend, onAccept, onReject, onDelete }) => {
 
       {sig.status === 'rejected' && sig.rejection_reason && (
         <div className="mb-2 p-2 bg-red-500/10 border border-red-500/20 rounded-lg">
-          <p className="text-xs text-red-300 font-medium mb-0.5">Rejection reason:</p>
-          <p className="text-xs text-red-400/80 italic">"{sig.rejection_reason}"</p>
+          <p className="text-xs text-red-300 font-medium mb-0.5">Reason:</p>
+          <p className="text-xs text-red-400/80 italic line-clamp-2">"{sig.rejection_reason}"</p>
         </div>
       )}
 
@@ -638,9 +640,7 @@ const SigCard = ({ sig, onSign, onSend, onAccept, onReject, onDelete }) => {
         <span className="text-xs text-white/30">Page {sig.page_number}</span>
         <div className="flex items-center gap-2">
           {sig.link_sent && (
-            <span className="text-xs text-yellow-400/60" title="Position locked (link sent)">
-              🔒
-            </span>
+            <span className="text-xs text-yellow-400/60" title="Locked">🔒</span>
           )}
           <span className="text-xs text-white/25 font-mono">
             {Math.round(sig.coordinates?.x ?? 0)}, {Math.round(sig.coordinates?.y ?? 0)}
