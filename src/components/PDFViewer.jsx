@@ -376,4 +376,4 @@ const ErrState = ({ fileUrl, message }) => (
   </div>
 );
 
-export default PDFViewe
+export default PDFViewer

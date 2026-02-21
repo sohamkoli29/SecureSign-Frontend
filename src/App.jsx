@@ -6,6 +6,7 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import SignDocumentPage from './pages/SignDocumentPage';
 import PublicSignPage from './pages/PublicSignPage'
+import AuthCallback from './components/AuthCallback';
 import './index.css';
 
 // Protected Route Component
@@ -73,7 +74,12 @@ function App() {
             </ProtectedRoute>
           } 
         />
+         <Route 
+        path="/auth/callback" 
+        element={<AuthCallback setUser={setUser} />} 
+      />
         <Route path="/sign/public/:token" element={<PublicSignPage />} />
+
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </Router>
