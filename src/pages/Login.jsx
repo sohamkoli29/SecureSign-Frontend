@@ -121,7 +121,7 @@ const Login = ({ setUser }) => {
 
           {/* Footer */}
           <div className="text-sm text-blue-300">
-            © 2024 SecureSign. All rights reserved.
+            © 2026 SecureSign. All rights reserved.
           </div>
         </div>
       </div>

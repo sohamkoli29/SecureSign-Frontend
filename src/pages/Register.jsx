@@ -149,7 +149,7 @@ const Register = ({ setUser }) => {
 
           {/* Footer */}
           <div className="text-sm text-emerald-300">
-            © 2024 SecureSign. All rights reserved.
+            © 2026 SecureSign. All rights reserved.
           </div>
         </div>
       </div>
